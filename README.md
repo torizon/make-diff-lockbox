@@ -52,7 +52,7 @@ By default, the script creates a Lockbox leveraging the static-delta feature of 
 
 ## How the script works
 
-Here's an outline of the operations performed by the script:
+Here's an outline of the operations performed by the script **when using static-deltas**:
 
 - Load the commits from both input OSTree repositories into a temporary repository.
 - Generate the static-deltas between the two commits inside the temporary repository.
@@ -63,11 +63,15 @@ Here's an outline of the operations performed by the script:
 
 The reason for performing these simulation runs is to address the non-deterministic behavior of OSTree when fetching multiple artifacts in parallel.
 
+The operations performed by the script **when not using static-deltas** are just:
+
+- Go over each object present in the second OSTree repository checking if the same file exists in the first repository and collecting that information.
+- Produce the output repository including only the files that exist in the second repository but do not exist in the first one.
+
 
 ## Known limitations
 
 - Only the OSTree part of a Lockbox is handled by the script; it will fail if the Lockbox does not contain an OSTree repository in it.
-- Creating differential Lockboxes without the use of OSTree static-deltas is not currently supported; the script will fail if the switch `--without-static-deltas` is passed.
 
 
 ## License

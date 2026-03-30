@@ -241,8 +241,70 @@ make_diff_ostree_sd() {
 
 # Make a differential OSTree repo (non static-deltas case).
 make_diff_ostree_no_sd() {
-    fatal "Generating a differential Lockbox without using static-deltas" \
-	  "is not currently supported."
+    local ostree_a="${1?path for ostree A required}"
+    local ostree_b="${2?path for ostree B required}"
+
+    # ostree-ab-diff: differential OSTree repo (A to B).
+    local ostree_ab_diff=$(mktemp -t -d "tmp.ostree-ab-diff.XXXXXXXXXX")
+
+    # ostree-{drop,keep}-list: Files to be droped/kept in the diff repo.
+    local drop_list=$(mktemp -t "tmp.ostree-drop-list.XXXXXXXXXX")
+    local keep_list=$(mktemp -t "tmp.ostree-keep-list.XXXXXXXXXX")
+
+    function make_diff_ostree_cleanup() {
+        debug 'Cleaning up for make_diff_ostree_no_sd()...'
+        rm -fr ${DEBUG:+-v} "${ostree_ab_diff}" || true
+        rm -fr ${DEBUG:+-v} "${drop_list}" || true
+        rm -fr ${DEBUG:+-v} "${keep_list}" || true
+    }
+
+    trap "make_diff_ostree_cleanup" EXIT
+
+    # ---
+    # Determine differences:
+    # ---
+    info --header "Determine differences between repos"
+
+    local ostree_a_full=$(realpath "${ostree_a}")
+    (
+        # Go over all objects in B checking if they are present on A:
+        # If an object is present on A then it can be deleted from B.
+        cd "${ostree_b}/objects/"
+        find . \
+             -type f \
+             -exec bash -c "
+                       test -e \"${ostree_a_full}/objects/{}\" && \
+                       echo \"{}\" | sed -e 's#\./../##' -e 's#\.filez#\.file#' >> \"${drop_list}\" || \
+                       echo \"{}\" | sed -e 's#\./../##' -e 's#\.filez#\.file#' >> \"${keep_list}\"
+                   " \;
+    )
+
+    if [ "${VERBOSE}" = "yes" ]; then
+        info "Objects present in repo A (can be deleted):"
+        cat "${drop_list}" | sed -e 's/^/> /'
+        info "Objects only present in repo B (will be kept):"
+        cat "${keep_list}" | sed -e 's/^/> /'
+    fi
+    info "Number of objects present in repo A (to be deleted): $(wc -l "${drop_list}" | cut -d' ' -f1)"
+    info "Number of objects only present in repo B (to be kept): $(wc -l "${keep_list}" | cut -d' ' -f1)"
+
+    # ---
+    # Generate diff repo based on B by dropping unnecessary files:
+    # ---
+    info --header "Generate differential OSTree repository"
+    info "Generating OSTree repository with unnecessary files deleted."
+    cp -a "${ostree_b}/." "${ostree_ab_diff}/"
+    drop_ostree_objects "${ostree_ab_diff}" "${keep_list}"
+
+    # At this point all ops succeded so we move the temporary result in ostree-ab-diff to
+    # ostree-diff-repo which can then be consumed by the caller (which is responsible for
+    # deleting that directory).
+    OSTREE_DIFF_REPO=$(mktemp -u -t -d "tmp.ostree-diff-repo.XXXXXXXXXX")
+    mv "${ostree_ab_diff}" "${OSTREE_DIFF_REPO}"
+
+    make_diff_ostree_cleanup
+
+    trap - EXIT
 }
 
 make_diff_lockbox() {
