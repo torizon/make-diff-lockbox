@@ -9,6 +9,15 @@
 # shellcheck disable=SC2155
 set -e -o pipefail
 
+# Define whether or not to use colors (honor NO_COLOR if set)
+if [ "${NO_COLOR+is_set}" ]; then
+    NO_COLOR="1"
+elif test -t 1; then
+    NO_COLOR="0"
+else
+    NO_COLOR="1"
+fi
+
 # DEBUG can be passed in the environment (values: "yes" or "" (empty))
 DEBUG=${DEBUG:-}
 SIM_PULL_ROUNDS_DEFAULT=${SIM_PULL_ROUNDS_DEFAULT:-1}
@@ -26,7 +35,11 @@ GEN_STATIC_DELTAS_ARGS=""
 SIM_PULL_ROUNDS=${SIM_PULL_ROUNDS_DEFAULT}
 
 yellow() {
-    printf '\033[01;33m%s\033[0m' "$*"
+    if [ "${NO_COLOR}" = "1" ]; then
+        printf '%s' "$*"
+    else
+        printf '\033[01;33m%s\033[0m' "$*"
+    fi
 }
 
 fatal() {
